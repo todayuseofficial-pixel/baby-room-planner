@@ -1,0 +1,742 @@
+<!DOCTYPE html>
+<html lang="ko">
+<head>
+    <meta charset="UTF-8">
+    <meta name="viewport" content="width=device-width, initial-scale=1.0, maximum-scale=1.0, user-scalable=no">
+    <title>아기방 3D 인테리어 플래너</title>
+    <!-- Three.js & OrbitControls -->
+    <script src="https://cdnjs.cloudflare.com/ajax/libs/three.js/r128/three.min.js"></script>
+    <script src="https://cdn.jsdelivr.net/npm/three@0.128.0/examples/js/controls/OrbitControls.js"></script>
+    <!-- Google Fonts: Noto Sans KR -->
+    <link rel="preconnect" href="https://fonts.googleapis.com">
+    <link rel="preconnect" href="https://fonts.gstatic.com" crossorigin>
+    <link href="https://fonts.googleapis.com/css2?family=Noto+Sans+KR:wght@400;500;700&display=swap" rel="stylesheet">
+    <style>
+        :root {
+            --bg-body: #F9F6F0;
+            --bg-panel: #EBE3D5;
+            --text-main: #5c5046;
+            --text-sub: #8E7D71;
+            --primary: #c9bcae;
+            --primary-hover: #b8ab9d;
+            --danger: #e74c3c;
+            --border: #dcd3c6;
+            --shadow: 0 4px 12px rgba(0, 0, 0, 0.05);
+        }
+
+        * { box-sizing: border-box; margin: 0; padding: 0; }
+
+        body {
+            font-family: 'Noto Sans KR', sans-serif;
+            background-color: var(--bg-body);
+            color: var(--text-main);
+            height: 100vh;
+            display: flex;
+            flex-direction: column;
+            overflow: hidden;
+        }
+
+        .app-container { display: flex; flex: 1; overflow: hidden; height: 100%; }
+
+        .sidebar {
+            width: 380px;
+            background: var(--bg-panel);
+            border-right: 1px solid var(--border);
+            display: flex;
+            flex-direction: column;
+            flex-shrink: 0;
+            z-index: 10;
+            box-shadow: 2px 0 15px rgba(0,0,0,0.03);
+        }
+        .sidebar-header { padding: 20px; border-bottom: 1px solid var(--border); background: var(--bg-panel); text-align: center; }
+        .sidebar-header h2 { font-size: 1.25rem; font-weight: 700; color: var(--text-main); letter-spacing: -0.5px; margin: 0; }
+        .sidebar-content { flex: 1; overflow-y: auto; padding-bottom: 20px; }
+        .section { padding: 18px 20px; border-bottom: 1px solid var(--border); }
+        .section-title { font-size: 0.95rem; font-weight: 700; color: var(--text-main); margin-bottom: 14px; }
+        
+        .form-row { display: flex; gap: 10px; margin-bottom: 12px; }
+        .form-group { flex: 1; display: flex; flex-direction: column; gap: 6px; }
+        .form-group-full { width: 100%; display: flex; flex-direction: column; gap: 6px; margin-bottom: 12px; }
+        
+        label { font-size: 0.8rem; font-weight: 500; color: var(--text-sub); }
+        input[type="number"], select {
+            width: 100%; padding: 10px; border: 1px solid var(--border);
+            border-radius: 6px; font-size: 0.9rem; background-color: #faf9f7;
+            font-family: 'Noto Sans KR', sans-serif; transition: border-color 0.2s;
+            color: var(--text-main);
+        }
+        input[type="number"]:focus, select:focus { outline: none; border-color: var(--text-sub); }
+        
+        button.btn-primary {
+            width: 100%; padding: 12px; background-color: var(--primary); color: #fff;
+            border: none; border-radius: 6px; font-size: 0.9rem; font-weight: 700; cursor: pointer;
+            transition: background-color 0.2s, transform 0.1s; margin-top: 5px;
+            font-family: 'Noto Sans KR', sans-serif; text-shadow: 0 1px 2px rgba(0,0,0,0.1);
+        }
+        button.btn-primary:hover { background-color: var(--primary-hover); }
+        button.btn-primary:active { transform: scale(0.98); }
+
+        .item-card { background: #faf9f7; border: 1px solid var(--border); border-radius: 8px; padding: 14px; margin-bottom: 10px; box-shadow: 0 2px 4px rgba(0,0,0,0.02); }
+        .item-header { display: flex; justify-content: space-between; font-size: 0.9rem; font-weight: 700; margin-bottom: 8px; color: var(--text-main); }
+        .item-desc { font-size: 0.75rem; color: var(--text-sub); margin-bottom: 10px; }
+        .item-actions { display: flex; gap: 5px; }
+        .btn-action {
+            flex: 1; padding: 8px; border: 1px solid var(--border); background: #fff; color: var(--text-main);
+            border-radius: 6px; font-size: 0.8rem; cursor: pointer; font-weight: 500;
+            font-family: 'Noto Sans KR', sans-serif; transition: 0.2s;
+        }
+        .btn-action:hover { background: #f0ebe1; }
+        .btn-delete { color: var(--danger); }
+        .btn-delete:hover { background: #fdf0ed; border-color: var(--danger); }
+
+        .main-area { flex: 1; display: flex; flex-direction: column; position: relative; background: #e0d9cc; }
+        .view-toggle {
+            position: absolute; top: 20px; right: 20px; display: flex; background: rgba(255, 255, 255, 0.95);
+            padding: 5px; border-radius: 8px; box-shadow: var(--shadow); z-index: 20; border: 1px solid var(--border);
+        }
+        .view-btn { padding: 8px 16px; border: none; background: transparent; font-size: 0.85rem; font-weight: 700; border-radius: 6px; cursor: pointer; color: var(--text-sub); font-family: 'Noto Sans KR', sans-serif; transition: 0.2s; }
+        .view-btn.active { background: var(--primary); color: #fff; }
+
+        #view-2d {
+            flex: 1; display: flex; align-items: center; justify-content: center; overflow: hidden;
+            position: relative; background-image: radial-gradient(#d1c7b8 1px, transparent 1px); background-size: 20px 20px;
+        }
+        .room-2d {
+            background: #fff; position: relative; box-shadow: var(--shadow);
+            border: 4px solid #8E7D71; border-left: 4px dashed #dcd3c6;
+            touch-action: none;
+        }
+        .window-2d { position: absolute; background: rgba(135, 206, 235, 0.5); z-index: 2; border: 2px solid #5ca0c1; }
+        
+        .furniture-2d {
+            position: absolute; cursor: grab; display: flex; align-items: center; justify-content: center; text-align: center;
+            font-size: 0.7rem; font-weight: 700; color: rgba(0,0,0,0.8); user-select: none; touch-action: none;
+            box-shadow: 0 4px 6px rgba(0,0,0,0.15); z-index: 5; transform-origin: center center;
+        }
+        .furniture-2d.dragging { cursor: grabbing; z-index: 100; box-shadow: 0 10px 20px rgba(0,0,0,0.3); opacity: 0.9; }
+        
+        .front-indicator { position: absolute; bottom: 0; left: 0; width: 100%; height: 6px; background-color: #e74c3c; }
+
+        #view-3d { flex: 1; display: none; width: 100%; height: 100%; }
+        canvas { display: block; width: 100%; height: 100%; outline: none; }
+
+        @media (max-width: 850px) {
+            .app-container { flex-direction: column; }
+            .sidebar { width: 100%; height: 45vh; border-right: none; border-bottom: 2px solid var(--border); }
+            .main-area { height: 55vh; }
+        }
+    </style>
+</head>
+<body>
+
+<div class="app-container">
+    <div class="sidebar">
+        <div class="sidebar-header">
+            <h2>🍼 아기방 3D 플래너</h2>
+        </div>
+        <div class="sidebar-content">
+            <!-- 1. Room & Window Settings -->
+            <div class="section">
+                <div class="section-title">📐 방 & 창문 설정 (좌측 오픈뷰)</div>
+                <div class="form-row">
+                    <div class="form-group"><label>방 가로 (W)</label><input type="number" id="room-w" value="3100" onchange="updateRoom()"></div>
+                    <div class="form-group"><label>방 세로 (D)</label><input type="number" id="room-d" value="2500" onchange="updateRoom()"></div>
+                    <div class="form-group"><label>방 높이 (H)</label><input type="number" id="room-h" value="2200" onchange="updateRoom()"></div>
+                </div>
+                <div class="form-row">
+                    <div class="form-group">
+                        <label>벽지 컬러</label>
+                        <select id="room-color" onchange="updateRoom()">
+                            <option value="#f9f6f0">소프트 베이지</option>
+                            <option value="#ffffff">화이트</option>
+                            <option value="#e5e3de">웜그레이지</option>
+                            <option value="#dfdfe8">파스텔 라벤더</option>
+                            <option value="stripe_blue">블루 스트라이프</option>
+                            <option value="stripe_beige">베이지 스트라이프</option>
+                        </select>
+                    </div>
+                </div>
+                <hr style="border:0; border-top:1px dashed var(--border); margin: 10px 0;">
+                <div class="form-row">
+                    <div class="form-group"><label>창문 가로(W)</label><input type="number" id="win-w" value="1200" onchange="updateRoom()"></div>
+                    <div class="form-group"><label>창문 높이(H)</label><input type="number" id="win-h" value="1200" onchange="updateRoom()"></div>
+                    <div class="form-group"><label>바닥 띄움(Elev)</label><input type="number" id="win-elev" value="800" onchange="updateRoom()"></div>
+                </div>
+                <div class="form-row">
+                    <div class="form-group">
+                        <label>창문 위치</label>
+                        <select id="win-pos" onchange="updateRoom()">
+                            <option value="back">정면 벽 (맞은편)</option>
+                            <option value="right">우측 벽</option>
+                            <option value="front">앞쪽 벽</option>
+                        </select>
+                    </div>
+                    <div class="form-group">
+                        <label>창문 장식</label>
+                        <select id="win-decor" onchange="updateRoom()">
+                            <option value="none">없음</option>
+                            <option value="curtain_white">쉬폰 커튼 (화이트)</option>
+                            <option value="curtain_beige">쉬폰 커튼 (베이지)</option>
+                            <option value="blind_wood">블라인드 (우드)</option>
+                            <option value="blind_white">블라인드 (화이트)</option>
+                        </select>
+                    </div>
+                </div>
+            </div>
+
+            <!-- 2. Add Item -->
+            <div class="section">
+                <div class="section-title">➕ 가구 & 소품 추가</div>
+                <div class="form-group-full">
+                    <label>종류 선택</label>
+                    <select id="add-type" onchange="onTypeChange()">
+                        <option value="crib">🛏️ 아기 침대</option>
+                        <option value="dresser">🗄️ 서랍장</option>
+                        <option value="changer">🍼 기저귀갈이대</option>
+                        <option value="rug">🧶 러그 (바닥)</option>
+                        <option value="clock">🕒 벽시계</option>
+                        <option value="lamp">💡 무드등</option>
+                    </select>
+                </div>
+                
+                <div class="form-row" id="dim-inputs">
+                    <div class="form-group"><label>가로 (W)</label><input type="number" id="add-w" value="1200"></div>
+                    <div class="form-group"><label>세로 (D)</label><input type="number" id="add-d" value="700"></div>
+                    <div class="form-group" id="group-h"><label>높이 (H)</label><input type="number" id="add-h" value="850"></div>
+                </div>
+
+                <div class="form-group-full" id="crib-opt" style="display: flex;">
+                    <label>침대 종류</label>
+                    <select id="add-bed-type" onchange="onBedTypeChange()">
+                        <option value="wooden">원목침대</option>
+                        <option value="bumper">범퍼침대</option>
+                    </select>
+                </div>
+
+                <div class="form-group-full" id="dresser-opt" style="display: none;">
+                    <label>서랍 칸수 (단)</label>
+                    <input type="number" id="add-drawers" value="3" min="1" max="6">
+                </div>
+
+                <div class="form-group-full" id="changer-opt" style="display: none;">
+                    <label>브랜드 스타일</label>
+                    <select id="add-brand">
+                        <option value="sobemom">소베맘 (베이지톤)</option>
+                        <option value="kiddle">키들 (우드톤)</option>
+                        <option value="ryan">리안 (그레이톤)</option>
+                        <option value="boomcare">붐케어 (화이트톤)</option>
+                    </select>
+                </div>
+
+                <div class="form-group-full" id="rug-opt" style="display: none;">
+                    <label>러그 컬러</label>
+                    <select id="add-color">
+                        <option value="#f5f5dc">베이지</option>
+                        <option value="#ffffff">화이트</option>
+                        <option value="#ffc0cb">핑크</option>
+                        <option value="#87ceeb">하늘색</option>
+                        <option value="#8b4513">갈색</option>
+                    </select>
+                </div>
+                
+                <button class="btn-primary" onclick="addItem()">도면에 추가하기</button>
+            </div>
+
+            <!-- 3. Item List -->
+            <div class="section" style="border-bottom: none;">
+                <div class="section-title">📋 배치 목록 (<span id="item-count">0</span>)</div>
+                <div id="item-list-container"></div>
+            </div>
+        </div>
+    </div>
+
+    <div class="main-area">
+        <div class="view-toggle">
+            <button class="view-btn active" id="btn-2d" onclick="switchView('2d')">2D 도면</button>
+            <button class="view-btn" id="btn-3d" onclick="switchView('3d')">3D 뷰</button>
+        </div>
+        <div id="view-2d">
+            <div class="room-2d" id="room-2d-canvas">
+                <div id="win-2d-el" class="window-2d"></div>
+                <div id="furniture-container-2d"></div>
+            </div>
+        </div>
+        <div id="view-3d"></div>
+    </div>
+</div>
+
+<script>
+    let state = {
+        room: { w: 3100, d: 2500, h: 2200, color: '#f9f6f0' },
+        window: { pos: 'back', w: 1200, h: 1200, elev: 800, decor: 'none' },
+        items: []
+    };
+
+    const typeConfig = {
+        crib: { name: '아기 침대', w: 1200, d: 700, h: 850, bg: '#d4a373' },
+        dresser: { name: '서랍장', w: 1200, d: 400, h: 800, bg: '#ffffff' },
+        changer: { name: '기저귀갈이대', w: 800, d: 500, h: 950, bg: '#f1f2f6' },
+        rug: { name: '러그', w: 1500, d: 1000, h: 10, bg: '#f5f5dc' },
+        clock: { name: '벽시계', w: 300, d: 50, h: 300, bg: '#8E7D71' },
+        lamp: { name: '무드등', w: 200, d: 100, h: 200, bg: '#ffdd59' }
+    };
+
+    let scale2D = 0.15;
+
+    function updateRoom() {
+        state.room.w = parseInt(document.getElementById('room-w').value) || 3100;
+        state.room.d = parseInt(document.getElementById('room-d').value) || 2500;
+        state.room.h = parseInt(document.getElementById('room-h').value) || 2200;
+        state.room.color = document.getElementById('room-color').value;
+        
+        state.window.w = parseInt(document.getElementById('win-w').value) || 1200;
+        state.window.h = parseInt(document.getElementById('win-h').value) || 1200;
+        state.window.elev = parseInt(document.getElementById('win-elev').value) || 800;
+        state.window.pos = document.getElementById('win-pos').value;
+        state.window.decor = document.getElementById('win-decor').value;
+        
+        adjustScale2D(); render2D(); build3DScene();
+    }
+
+    function onTypeChange() {
+        const t = document.getElementById('add-type').value;
+        const conf = typeConfig[t];
+        document.getElementById('add-w').value = conf.w;
+        document.getElementById('add-d').value = conf.d;
+        document.getElementById('add-h').value = conf.h;
+        
+        document.getElementById('dim-inputs').style.display = (t === 'clock' || t === 'lamp') ? 'none' : 'flex';
+        document.getElementById('group-h').style.display = (t === 'rug') ? 'none' : 'flex';
+        
+        document.getElementById('crib-opt').style.display = t === 'crib' ? 'flex' : 'none';
+        document.getElementById('dresser-opt').style.display = t === 'dresser' ? 'flex' : 'none';
+        document.getElementById('changer-opt').style.display = t === 'changer' ? 'flex' : 'none';
+        document.getElementById('rug-opt').style.display = t === 'rug' ? 'flex' : 'none';
+
+        if (t === 'crib') onBedTypeChange();
+    }
+
+    function onBedTypeChange() {
+        const bt = document.getElementById('add-bed-type').value;
+        if(bt === 'bumper') {
+            document.getElementById('add-w').value = 1400;
+            document.getElementById('add-d').value = 1000;
+            document.getElementById('add-h').value = 400;
+        } else {
+            document.getElementById('add-w').value = 1200;
+            document.getElementById('add-d').value = 700;
+            document.getElementById('add-h').value = 850;
+        }
+    }
+
+    function addItem() {
+        const t = document.getElementById('add-type').value;
+        const conf = typeConfig[t];
+        let w = parseInt(document.getElementById('add-w').value) || conf.w;
+        let d = parseInt(document.getElementById('add-d').value) || conf.d;
+        let h = parseInt(document.getElementById('add-h').value) || conf.h;
+        
+        let color = conf.bg;
+        let extras = {};
+        
+        if(t === 'clock' || t === 'lamp') { w = conf.w; d = conf.d; h = conf.h; }
+        if(t === 'rug') color = document.getElementById('add-color').value;
+        if(t === 'crib') extras.bedType = document.getElementById('add-bed-type').value;
+        if(t === 'dresser') extras.drawers = parseInt(document.getElementById('add-drawers').value) || 3;
+        if(t === 'changer') extras.brand = document.getElementById('add-brand').value;
+
+        state.items.push({
+            id: 'item_' + Date.now(),
+            type: t, name: conf.name,
+            w: w, d: d, h: h, color: color,
+            extras: extras,
+            x: state.room.w / 2, y: state.room.d / 2, rot: 0
+        });
+        renderList(); render2D(); build3DScene();
+    }
+
+    function rotateItem(id) {
+        const item = state.items.find(i => i.id === id);
+        if (item) {
+            item.rot = (item.rot + 90) % 360;
+            clampPosition(item); render2D(); update3DPositions();
+        }
+    }
+
+    function deleteItem(id) {
+        state.items = state.items.filter(i => i.id !== id);
+        renderList(); render2D(); build3DScene();
+    }
+
+    function renderList() {
+        const container = document.getElementById('item-list-container');
+        document.getElementById('item-count').innerText = state.items.length;
+        if (state.items.length === 0) { container.innerHTML = `<p style="font-size:0.85rem; color:var(--text-sub); text-align:center;">아이템이 없습니다.</p>`; return; }
+        
+        container.innerHTML = state.items.map(i => {
+            let detail = `W:${i.w} x D:${i.d} ${i.type!=='rug'&&i.type!=='clock'&&i.type!=='lamp' ? `x H:${i.h}` : ''}`;
+            if(i.type === 'crib') detail += ` (${i.extras.bedType === 'bumper' ? '범퍼침대' : '원목침대'})`;
+            if(i.type === 'dresser') detail += ` (${i.extras.drawers}단)`;
+            if(i.type === 'changer') detail += ` (${i.extras.brand})`;
+            return `
+            <div class="item-card">
+                <div class="item-header"><span>${i.name}</span></div>
+                <div class="item-desc">${detail}</div>
+                <div class="item-actions">
+                    <button class="btn-action" onclick="rotateItem('${i.id}')">🔄 90도 회전</button>
+                    <button class="btn-action btn-delete" onclick="deleteItem('${i.id}')">🗑️ 삭제</button>
+                </div>
+            </div>`;
+        }).join('');
+    }
+
+    function switchView(v) {
+        document.getElementById('btn-2d').classList.toggle('active', v==='2d');
+        document.getElementById('btn-3d').classList.toggle('active', v==='3d');
+        document.getElementById('view-2d').style.display = v==='2d' ? 'flex' : 'none';
+        document.getElementById('view-3d').style.display = v==='3d' ? 'block' : 'none';
+        
+        if(v === '2d') setTimeout(() => { adjustScale2D(); render2D(); }, 10);
+        else if(v === '3d' && renderer) {
+            setTimeout(() => {
+                const c = document.getElementById('view-3d');
+                camera.aspect = c.clientWidth / c.clientHeight; camera.updateProjectionMatrix();
+                renderer.setSize(c.clientWidth, c.clientHeight);
+            }, 10);
+        }
+    }
+
+    const roomCanvas = document.getElementById('room-2d-canvas');
+    function adjustScale2D() {
+        const c = document.getElementById('view-2d');
+        if(c.clientWidth === 0) return;
+        scale2D = Math.min((c.clientWidth - 40) / state.room.w, (c.clientHeight - 40) / state.room.d, 0.3);
+    }
+
+    function render2D() {
+        roomCanvas.style.width = `${state.room.w * scale2D}px`;
+        roomCanvas.style.height = `${state.room.d * scale2D}px`;
+        
+        if (state.room.color === 'stripe_blue') {
+            roomCanvas.style.background = 'repeating-linear-gradient(90deg, #ffffff, #ffffff 10px, #aec6cf 10px, #aec6cf 20px)';
+        } else if (state.room.color === 'stripe_beige') {
+            roomCanvas.style.background = 'repeating-linear-gradient(90deg, #ffffff, #ffffff 10px, #e5d3b3 10px, #e5d3b3 20px)';
+        } else {
+            roomCanvas.style.background = state.room.color;
+        }
+
+        const winEl = document.getElementById('win-2d-el');
+        winEl.style.cssText = `position:absolute; background:rgba(135,206,235,0.5); z-index:2; border:2px solid #5ca0c1;`;
+        const winW2D = state.window.w * scale2D;
+        const th = 6;
+        if(state.window.pos === 'back') { winEl.style.top='-3px'; winEl.style.left='50%'; winEl.style.transform='translateX(-50%)'; winEl.style.width=`${winW2D}px`; winEl.style.height=`${th}px`; }
+        else if(state.window.pos === 'right') { winEl.style.right='-3px'; winEl.style.top='50%'; winEl.style.transform='translateY(-50%)'; winEl.style.height=`${winW2D}px`; winEl.style.width=`${th}px`; }
+        else if(state.window.pos === 'front') { winEl.style.bottom='-3px'; winEl.style.left='50%'; winEl.style.transform='translateX(-50%)'; winEl.style.width=`${winW2D}px`; winEl.style.height=`${th}px`; }
+
+        const cont = document.getElementById('furniture-container-2d'); cont.innerHTML = '';
+        state.items.forEach(i => {
+            const el = document.createElement('div');
+            el.className = 'furniture-2d'; el.dataset.id = i.id;
+            el.style.width = `${i.w * scale2D}px`; el.style.height = `${i.d * scale2D}px`;
+            el.style.background = i.color;
+            el.style.border = `2px solid rgba(0,0,0,0.3)`;
+            el.style.borderRadius = i.type === 'clock' ? '50%' : '2px';
+            el.style.zIndex = i.type === 'rug' ? 3 : (i.type==='clock'||i.type==='lamp' ? 7 : 5);
+            
+            const textColor = i.type === 'dresser' || i.type === 'rug' || i.type === 'changer' ? '#333' : '#fff';
+            const showRedLine = (i.type !== 'rug' && i.type !== 'clock' && i.type !== 'lamp');
+            el.innerHTML = `<span style="color:${textColor}; font-size:10px;">${i.name.substring(0,4)}</span>
+                            ${showRedLine ? `<div class="front-indicator"></div>` : ''}`;
+            el.style.left = `${i.x * scale2D}px`; el.style.top = `${i.y * scale2D}px`;
+            el.style.transform = `translate(-50%, -50%) rotate(${i.rot}deg)`;
+            cont.appendChild(el);
+        });
+    }
+
+    let activeDragId = null, startMouseX = 0, startMouseY = 0, startObjX = 0, startObjY = 0;
+    roomCanvas.addEventListener('pointerdown', e => {
+        const t = e.target.closest('.furniture-2d'); if(!t) return;
+        activeDragId = t.dataset.id; t.classList.add('dragging'); t.setPointerCapture(e.pointerId);
+        const rect = roomCanvas.getBoundingClientRect();
+        startMouseX = (e.clientX - rect.left) / scale2D; startMouseY = (e.clientY - rect.top) / scale2D;
+        const item = state.items.find(i => i.id === activeDragId);
+        startObjX = item.x; startObjY = item.y;
+    });
+
+    roomCanvas.addEventListener('pointermove', e => {
+        if(!activeDragId) return;
+        const rect = roomCanvas.getBoundingClientRect();
+        const item = state.items.find(i => i.id === activeDragId);
+        item.x = startObjX + ((e.clientX - rect.left) / scale2D - startMouseX);
+        item.y = startObjY + ((e.clientY - rect.top) / scale2D - startMouseY);
+        clampPosition(item);
+        const el = document.querySelector(`.furniture-2d[data-id="${activeDragId}"]`);
+        if(el) { el.style.left = `${item.x * scale2D}px`; el.style.top = `${item.y * scale2D}px`; }
+        update3DPositions();
+    });
+
+    const endDrag = e => {
+        if(activeDragId) {
+            const el = document.querySelector(`.furniture-2d[data-id="${activeDragId}"]`);
+            if(el) { el.classList.remove('dragging'); if(e.pointerId) el.releasePointerCapture(e.pointerId); }
+            activeDragId = null;
+        }
+    };
+    roomCanvas.addEventListener('pointerup', endDrag); roomCanvas.addEventListener('pointercancel', endDrag);
+
+    function clampPosition(item) {
+        const isRot90 = item.rot % 180 !== 0;
+        const effW = isRot90 ? item.d : item.w; const effD = isRot90 ? item.w : item.d;
+        item.x = Math.max(effW/2, Math.min(item.x, state.room.w - effW/2));
+        item.y = Math.max(effD/2, Math.min(item.y, state.room.d - effD/2));
+    }
+
+    let scene, camera, renderer, controls, roomGroup = new THREE.Group(), furnitureGroups = {};
+
+    function init3D() {
+        const c = document.getElementById('view-3d');
+        scene = new THREE.Scene(); scene.background = new THREE.Color(0xe0d9cc);
+        scene.add(roomGroup);
+        camera = new THREE.PerspectiveCamera(45, c.clientWidth/c.clientHeight, 10, 50000);
+        camera.position.set(-state.room.w * 1.5, state.room.h * 1.2, 0);
+
+        renderer = new THREE.WebGLRenderer({ antialias: true });
+        renderer.setSize(c.clientWidth||800, c.clientHeight||600);
+        renderer.shadowMap.enabled = true; renderer.shadowMap.type = THREE.PCFSoftShadowMap;
+        c.appendChild(renderer.domElement);
+
+        controls = new THREE.OrbitControls(camera, renderer.domElement);
+        controls.enableDamping = true; controls.dampingFactor = 0.05;
+        controls.maxPolarAngle = Math.PI / 2 - 0.1;
+
+        scene.add(new THREE.AmbientLight(0xffffff, 0.7));
+        const dirLight = new THREE.DirectionalLight(0xffffff, 0.4);
+        dirLight.position.set(-2000, 3000, 2000); dirLight.castShadow = true;
+        dirLight.shadow.mapSize.width = 2048; dirLight.shadow.mapSize.height = 2048;
+        dirLight.shadow.camera.left = -3000; dirLight.shadow.camera.right = 3000;
+        dirLight.shadow.camera.top = 3000; dirLight.shadow.camera.bottom = -3000;
+        scene.add(dirLight);
+
+        build3DScene(); animate3D();
+
+        window.addEventListener('resize', () => {
+            if(c.style.display !== 'none' && c.clientWidth > 0) {
+                camera.aspect = c.clientWidth / c.clientHeight; camera.updateProjectionMatrix();
+                renderer.setSize(c.clientWidth, c.clientHeight);
+            }
+            if(document.getElementById('view-2d').style.display !== 'none') { adjustScale2D(); render2D(); }
+        });
+    }
+
+    function createCrib(w, d, h, bedType) {
+        const g = new THREE.Group(); 
+        if (bedType === 'bumper') {
+            const matBase = new THREE.MeshStandardMaterial({color: 0xfdfbf7});
+            const matGuard = new THREE.MeshStandardMaterial({color: 0xf4eee0});
+            const matt = new THREE.Mesh(new THREE.BoxGeometry(w-60, 100, d-60), matBase);
+            matt.position.set(0, -h/2 + 50, 0); matt.castShadow=true; g.add(matt);
+            const guardThick = 30;
+            let gB = new THREE.Mesh(new THREE.BoxGeometry(w, h, guardThick), matGuard); gB.position.set(0, 0, -d/2 + guardThick/2); gB.castShadow=true; g.add(gB);
+            let gF = new THREE.Mesh(new THREE.BoxGeometry(w, h, guardThick), matGuard); gF.position.set(0, 0, d/2 - guardThick/2); gF.castShadow=true; g.add(gF);
+            let gL = new THREE.Mesh(new THREE.BoxGeometry(guardThick, h, d - guardThick*2), matGuard); gL.position.set(-w/2 + guardThick/2, 0, 0); gL.castShadow=true; g.add(gL);
+            let gR = new THREE.Mesh(new THREE.BoxGeometry(guardThick, h, d - guardThick*2), matGuard); gR.position.set(w/2 - guardThick/2, 0, 0); gR.castShadow=true; g.add(gR);
+        } else {
+            const mat = new THREE.MeshStandardMaterial({color: 0xd4a373});
+            const mMat = new THREE.MeshStandardMaterial({color: 0xffffff});
+            const postW = 40;
+            [[-w/2+20, -d/2+20], [w/2-20, -d/2+20], [-w/2+20, d/2-20], [w/2-20, d/2-20]].forEach(p => {
+                let m = new THREE.Mesh(new THREE.BoxGeometry(postW, h, postW), mat); m.position.set(p[0], 0, p[1]); m.castShadow=true; g.add(m);
+            });
+            const matt = new THREE.Mesh(new THREE.BoxGeometry(w-80, 100, d-80), mMat); matt.position.set(0, -h/2+250, 0); matt.castShadow=true; g.add(matt);
+            [h/2-20, -h/2+220].forEach(y => {
+                let r1 = new THREE.Mesh(new THREE.BoxGeometry(w, 20, 20), mat); r1.position.set(0, y, -d/2+20); g.add(r1);
+                let r2 = new THREE.Mesh(new THREE.BoxGeometry(w, 20, 20), mat); r2.position.set(0, y, d/2-20); g.add(r2);
+                let r3 = new THREE.Mesh(new THREE.BoxGeometry(20, 20, d), mat); r3.position.set(-w/2+20, y, 0); g.add(r3);
+                let r4 = new THREE.Mesh(new THREE.BoxGeometry(20, 20, d), mat); r4.position.set(w/2-20, y, 0); g.add(r4);
+            });
+            const bGeo = new THREE.CylinderGeometry(8, 8, h-240);
+            for(let i=1; i<w/80; i++) {
+                let px = -w/2 + (w/(w/80))*i;
+                let b1 = new THREE.Mesh(bGeo, mat); b1.position.set(px, 100, -d/2+20); g.add(b1);
+                let b2 = new THREE.Mesh(bGeo, mat); b2.position.set(px, 100, d/2-20); g.add(b2);
+            }
+        }
+        return g;
+    }
+
+    function createDresser(w, d, h, drawersCount) {
+        const g = new THREE.Group();
+        const mat = new THREE.MeshStandardMaterial({color: 0xffffff});
+        const body = new THREE.Mesh(new THREE.BoxGeometry(w, h, d), mat); body.castShadow=true; g.add(body);
+        const dH = h / drawersCount;
+        for(let i=0; i<drawersCount; i++) {
+            let fr = new THREE.Mesh(new THREE.BoxGeometry(w-20, dH-10, 10), mat);
+            let dy = -h/2 + dH/2 + i*dH;
+            fr.position.set(0, dy, d/2 + 5); fr.castShadow=true; g.add(fr);
+            let hnd = new THREE.Mesh(new THREE.CylinderGeometry(8,8,120), new THREE.MeshStandardMaterial({color:0x8E7D71}));
+            hnd.rotation.z = Math.PI/2; hnd.position.set(0, dy, d/2 + 15); g.add(hnd);
+        }
+        return g;
+    }
+
+    function createChanger(w, d, h, brand) {
+        const g = new THREE.Group(); 
+        let baseColor = 0xf1f2f6;
+        if(brand === 'sobemom') baseColor = 0xe8e1d7;
+        else if(brand === 'kiddle') baseColor = 0xc8a98a;
+        else if(brand === 'ryan') baseColor = 0xbdc3c7;
+        else if(brand === 'boomcare') baseColor = 0xffffff;
+
+        const mat = new THREE.MeshStandardMaterial({color: baseColor});
+        const padMat = new THREE.MeshStandardMaterial({color: 0xffffff});
+        [[-w/2+15, -d/2+15], [w/2-15, -d/2+15], [-w/2+15, d/2-15], [w/2-15, d/2-15]].forEach(p => {
+            let m = new THREE.Mesh(new THREE.BoxGeometry(30, h, 30), mat); m.position.set(p[0], 0, p[1]); m.castShadow=true; g.add(m);
+        });
+        const pad = new THREE.Mesh(new THREE.BoxGeometry(w, 50, d), padMat); pad.position.set(0, h/2-25, 0); pad.castShadow=true; g.add(pad);
+        let gB = new THREE.Mesh(new THREE.BoxGeometry(w, 80, 20), mat); gB.position.set(0, h/2+40-25, -d/2+10); g.add(gB);
+        let gL = new THREE.Mesh(new THREE.BoxGeometry(20, 80, d), mat); gL.position.set(-w/2+10, h/2+40-25, 0); g.add(gL);
+        let gR = new THREE.Mesh(new THREE.BoxGeometry(20, 80, d), mat); gR.position.set(w/2-10, h/2+40-25, 0); g.add(gR);
+        for(let i=1; i<=2; i++) {
+            let s = new THREE.Mesh(new THREE.BoxGeometry(w, 20, d), mat); s.position.set(0, -h/2 + (h/3)*i, 0); s.castShadow=true; g.add(s);
+        }
+        return g;
+    }
+
+    function createRug(w, d, color) {
+        const g = new THREE.Group();
+        const rug = new THREE.Mesh(new THREE.BoxGeometry(w, 10, d), new THREE.MeshStandardMaterial({color: color, roughness: 1}));
+        rug.position.set(0, -4, 0);
+        rug.receiveShadow = true; g.add(rug);
+        return g;
+    }
+
+    function createClock() {
+        const g = new THREE.Group();
+        const c = new THREE.Mesh(new THREE.CylinderGeometry(150, 150, 40, 32), new THREE.MeshStandardMaterial({color: 0x8E7D71}));
+        c.rotation.x = Math.PI/2; c.castShadow=true; g.add(c);
+        const face = new THREE.Mesh(new THREE.CylinderGeometry(140, 140, 42, 32), new THREE.MeshStandardMaterial({color: 0xffffff}));
+        face.rotation.x = Math.PI/2; g.add(face);
+        return g;
+    }
+
+    function createLamp() {
+        const g = new THREE.Group();
+        const base = new THREE.Mesh(new THREE.BoxGeometry(100, 200, 20), new THREE.MeshStandardMaterial({color: 0xffffff}));
+        g.add(base);
+        const bulb = new THREE.Mesh(new THREE.SphereGeometry(70, 16, 16), new THREE.MeshStandardMaterial({color: 0xffdd59, emissive: 0xffa502, emissiveIntensity: 0.5}));
+        bulb.position.set(0, 0, 40); g.add(bulb);
+        return g;
+    }
+
+    function build3DScene() {
+        if(!scene) return;
+        while(roomGroup.children.length > 0) roomGroup.remove(roomGroup.children[0]);
+        furnitureGroups = {};
+
+        const rw = state.room.w, rd = state.room.d, rh = state.room.h;
+        
+        const floor = new THREE.Mesh(new THREE.PlaneGeometry(rw, rd), new THREE.MeshStandardMaterial({color: 0xd6ccc2}));
+        floor.rotation.x = -Math.PI/2; floor.receiveShadow = true; roomGroup.add(floor);
+
+        function getWallMaterial(width, height) {
+            if (state.room.color.startsWith('stripe_')) {
+                const canvas = document.createElement('canvas');
+                canvas.width = 512; canvas.height = 512;
+                const ctx = canvas.getContext('2d');
+                ctx.fillStyle = '#ffffff'; ctx.fillRect(0, 0, 512, 512);
+                ctx.fillStyle = state.room.color === 'stripe_blue' ? '#aec6cf' : '#e5d3b3';
+                for(let i=0; i<512; i+=64) ctx.fillRect(i, 0, 32, 512);
+                const tex = new THREE.CanvasTexture(canvas);
+                tex.wrapS = THREE.RepeatWrapping; tex.wrapT = THREE.RepeatWrapping;
+                tex.repeat.set(width / 400, 1);
+                return new THREE.MeshStandardMaterial({map: tex, side: THREE.DoubleSide});
+            }
+            return new THREE.MeshStandardMaterial({color: state.room.color, side: THREE.DoubleSide});
+        }
+
+        const bW = new THREE.Mesh(new THREE.PlaneGeometry(rw, rh), getWallMaterial(rw, rh)); bW.position.set(0, rh/2, -rd/2); bW.receiveShadow=true; roomGroup.add(bW);
+        const rW = new THREE.Mesh(new THREE.PlaneGeometry(rd, rh), getWallMaterial(rd, rh)); rW.rotation.y = -Math.PI/2; rW.position.set(rw/2, rh/2, 0); rW.receiveShadow=true; roomGroup.add(rW);
+        const fW = new THREE.Mesh(new THREE.PlaneGeometry(rw, rh), getWallMaterial(rw, rh)); fW.rotation.y = Math.PI; fW.position.set(0, rh/2, rd/2); fW.receiveShadow=true; roomGroup.add(fW);
+
+        const winM = new THREE.Mesh(new THREE.PlaneGeometry(state.window.w, state.window.h), new THREE.MeshStandardMaterial({color: 0x87ceeb, opacity:0.6, transparent:true}));
+        const wy = state.window.elev + state.window.h/2;
+        let wp = new THREE.Vector3(0, wy, -rd/2+5), wr = 0;
+        if(state.window.pos === 'right') { wp.set(rw/2-5, wy, 0); wr = -Math.PI/2; }
+        else if(state.window.pos === 'front') { wp.set(0, wy, rd/2-5); wr = Math.PI; }
+        
+        const decG = new THREE.Group();
+        winM.position.set(0,0,0); decG.add(winM);
+
+        if (state.window.decor !== 'none') {
+            if (state.window.decor.includes('curtain')) {
+                const curtainH = state.room.h - 30; 
+                const curtainY = -wy + 30 + curtainH / 2; 
+                const cColor = state.window.decor === 'curtain_white' ? 0xffffff : 0xf5f5dc;
+                const cMat = new THREE.MeshStandardMaterial({color: cColor, transparent: true, opacity: 0.8, side: THREE.DoubleSide});
+                const panelW = (state.window.w / 2) + 100; 
+                const cGeo = new THREE.PlaneGeometry(panelW, curtainH, 20, 1);
+                const pos = cGeo.attributes.position;
+                for(let j=0; j<pos.count; j++) { pos.setZ(j, Math.sin(pos.getX(j) * 0.1) * 20); }
+                cGeo.computeVertexNormals();
+
+                let cL = new THREE.Mesh(cGeo, cMat); cL.position.set(-state.window.w/2 - 20, curtainY, 30);
+                let cR = new THREE.Mesh(cGeo, cMat); cR.position.set(state.window.w/2 + 20, curtainY, 30);
+                decG.add(cL); decG.add(cR);
+            } else if (state.window.decor.includes('blind')) {
+                const bH = state.window.h + 100;
+                const bColor = state.window.decor === 'blind_white' ? 0xffffff : 0xd4a373;
+                const bMat = new THREE.MeshStandardMaterial({color: bColor});
+                const num = Math.floor(bH/30);
+                for(let i=0; i<num; i++) {
+                    let slat = new THREE.Mesh(new THREE.BoxGeometry(state.window.w+100, 15, 3), bMat);
+                    slat.rotation.x = 0.5; slat.position.set(0, bH/2 - i*30, 20); 
+                    decG.add(slat);
+                }
+            }
+        }
+        decG.position.copy(wp); decG.rotation.y = wr; roomGroup.add(decG);
+
+        state.items.forEach(i => {
+            let m;
+            if(i.type === 'crib') m = createCrib(i.w, i.d, i.h, i.extras.bedType);
+            else if(i.type === 'dresser') m = createDresser(i.w, i.d, i.h, i.extras.drawers);
+            else if(i.type === 'changer') m = createChanger(i.w, i.d, i.h, i.extras.brand);
+            else if(i.type === 'rug') m = createRug(i.w, i.d, i.color);
+            else if(i.type === 'clock') m = createClock();
+            else if(i.type === 'lamp') m = createLamp();
+            
+            if(m) { furnitureGroups[i.id] = m; roomGroup.add(m); }
+        });
+        update3DPositions();
+    }
+
+    function update3DPositions() {
+        const rw = state.room.w, rd = state.room.d;
+        state.items.forEach(i => {
+            const g = furnitureGroups[i.id];
+            if(g) {
+                let px = i.x - rw/2, pz = i.y - rd/2, py = i.h/2;
+                let rotY = -i.rot * Math.PI/180;
+                
+                if(i.type === 'clock' || i.type === 'lamp') {
+                    py = 1500;
+                    let dR = Math.abs(rw/2 - px), dB = Math.abs(-rd/2 - pz), dF = Math.abs(rd/2 - pz);
+                    let minD = Math.min(dR, dB, dF);
+                    if(minD === dR) { px = rw/2 - 10; rotY = -Math.PI/2; }
+                    else if(minD === dB) { pz = -rd/2 + 10; rotY = 0; }
+                    else { pz = rd/2 - 10; rotY = Math.PI; }
+                }
+                if(i.type === 'rug') py = 5;
+
+                g.position.set(px, py, pz);
+                g.rotation.y = rotY;
+            }
+        });
+    }
+
+    function animate3D() { requestAnimationFrame(animate3D); if(controls) controls.update(); if(renderer && scene && camera) renderer.render(scene, camera); }
+
+    window.onload = () => { onTypeChange(); renderList(); adjustScale2D(); render2D(); init3D(); };
+</script>
+</body>
+</html>
